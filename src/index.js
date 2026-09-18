@@ -14,6 +14,8 @@ const { ROLE_CHANNEL_ID, upsertPanel } = require('./panel');
 
 const { DISCORD_TOKEN } = process.env;
 
+const ADMIN_ROLE_ID = '1449827112017072336';
+
 if (!DISCORD_TOKEN) {
   console.error('DISCORD_TOKEN не указан в переменных окружения.');
   process.exit(1);
@@ -63,21 +65,32 @@ function discordRoleErrorText(error) {
 }
 
 async function replyEphemeral(interaction, content) {
-  if (interaction.deferred) {
-    return interaction.editReply({ content });
-  }
+  try {
+    if (interaction.deferred) {
+      return await interaction.editReply({ content });
+    }
 
-  if (interaction.replied) {
-    return interaction.followUp({
+    if (interaction.replied) {
+      return await interaction.followUp({
+        content,
+        flags: MessageFlags.Ephemeral
+      });
+    }
+
+    return await interaction.reply({
       content,
       flags: MessageFlags.Ephemeral
     });
-  }
+  } catch (error) {
+    if (error?.code === 40060 || error?.code === 10062) {
+      console.warn(
+        `[INTERACTION ALREADY HANDLED] id=${interaction.id} code=${error.code}`
+      );
+      return null;
+    }
 
-  return interaction.reply({
-    content,
-    flags: MessageFlags.Ephemeral
-  });
+    throw error;
+  }
 }
 
 client.once(Events.ClientReady, readyClient => {
@@ -86,6 +99,13 @@ client.once(Events.ClientReady, readyClient => {
 });
 
 client.on(Events.Error, error => {
+  // 40060/10062 обычно означают, что тот же interaction уже обработал
+  // другой экземпляр бота или interaction успел истечь.
+  if (error?.code === 40060 || error?.code === 10062) {
+    console.warn(`[Discord interaction warning] ${error.code}: ${error.message}`);
+    return;
+  }
+
   console.error('[Discord client error]', error);
 });
 
@@ -102,8 +122,11 @@ client.on(Events.InteractionCreate, async interaction => {
         return replyEphemeral(interaction, 'Эта команда работает только на сервере.');
       }
 
-      if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageRoles)) {
-        return replyEphemeral(interaction, 'Нужно право **Управление ролями**.');
+      if (!hasRoleFromInteraction(interaction, ADMIN_ROLE_ID)) {
+        return replyEphemeral(
+          interaction,
+          `Этой командой могут пользоваться только участники с ролью <@&${ADMIN_ROLE_ID}>.`
+        );
       }
 
       const sub = interaction.options.getSubcommand();
@@ -179,6 +202,96 @@ client.on(Events.InteractionCreate, async interaction => {
         return replyEphemeral(interaction, `Кнопка для роли ${role} сохранена.`);
       }
 
+
+if (sub === 'edit') {
+  const currentRole = interaction.options.getRole('role', true);
+  const newRole = interaction.options.getRole('new_role');
+  const newLabel = interaction.options.getString('label');
+  const newStyle = interaction.options.getString('style');
+  const newEmojiRaw = interaction.options.getString('emoji');
+
+  const itemIndex = config.buttons.findIndex(x => x.roleId === currentRole.id);
+
+  if (itemIndex < 0) {
+    return replyEphemeral(
+      interaction,
+      'Кнопка для выбранной роли не найдена.'
+    );
+  }
+
+  const targetRole = newRole ?? currentRole;
+
+  if (targetRole.id === interaction.guild.id) {
+    return replyEphemeral(interaction, 'Нельзя использовать роль @everyone.');
+  }
+
+  if (targetRole.managed) {
+    return replyEphemeral(
+      interaction,
+      'Эта роль управляется Discord/интеграцией и не может выдаваться ботом.'
+    );
+  }
+
+  const me = interaction.guild.members.me
+    ?? await interaction.guild.members.fetchMe().catch(() => null);
+
+  if (!me) {
+    return replyEphemeral(
+      interaction,
+      'Не удалось определить роль самого бота.'
+    );
+  }
+
+  if (!me.permissions.has(PermissionFlagsBits.ManageRoles)) {
+    return replyEphemeral(
+      interaction,
+      'У бота нет разрешения **Управление ролями**.'
+    );
+  }
+
+  if (targetRole.position >= me.roles.highest.position) {
+    return replyEphemeral(
+      interaction,
+      'Выдаваемая роль должна находиться **ниже самой высокой роли бота**.'
+    );
+  }
+
+  if (
+    newRole &&
+    newRole.id !== currentRole.id &&
+    config.buttons.some((x, i) => i !== itemIndex && x.roleId === newRole.id)
+  ) {
+    return replyEphemeral(
+      interaction,
+      'Для новой роли уже существует отдельная кнопка.'
+    );
+  }
+
+  const current = config.buttons[itemIndex];
+
+  let emoji = current.emoji ?? null;
+  if (newEmojiRaw !== null) {
+    emoji = newEmojiRaw.trim().toLowerCase() === 'none'
+      ? null
+      : newEmojiRaw.trim();
+  }
+
+  config.buttons[itemIndex] = {
+    roleId: targetRole.id,
+    label: newLabel?.trim() || current.label,
+    style: newStyle || current.style || 'secondary',
+    emoji
+  };
+
+  saveConfig(config);
+  await upsertPanel(interaction.guild, config, saveConfig);
+
+  return replyEphemeral(
+    interaction,
+    `Кнопка роли ${targetRole} обновлена.`
+  );
+}
+
       if (sub === 'remove') {
         const role = interaction.options.getRole('role', true);
         const before = config.buttons.length;
@@ -225,9 +338,21 @@ client.on(Events.InteractionCreate, async interaction => {
       if (!interaction.inGuild()) return;
 
       // Сразу подтверждаем interaction, чтобы Discord не получил timeout.
-      await interaction.deferReply({
-        flags: MessageFlags.Ephemeral
-      });
+      // Если interaction уже забрал другой экземпляр бота, просто прекращаем обработку.
+      try {
+        await interaction.deferReply({
+          flags: MessageFlags.Ephemeral
+        });
+      } catch (error) {
+        if (error?.code === 40060 || error?.code === 10062) {
+          console.warn(
+            `[BUTTON ALREADY HANDLED] id=${interaction.id} code=${error.code}`
+          );
+          return;
+        }
+
+        throw error;
+      }
 
       if (interaction.channelId !== ROLE_CHANNEL_ID) {
         return interaction.editReply({
@@ -335,6 +460,13 @@ client.on(Events.InteractionCreate, async interaction => {
       }
     }
   } catch (error) {
+    if (error?.code === 40060 || error?.code === 10062) {
+      console.warn(
+        `[INTERACTION SKIPPED] id=${interaction.id} code=${error.code}: ${error.message}`
+      );
+      return;
+    }
+
     console.error('[INTERACTION ERROR]', {
       name: error?.name,
       code: error?.code,

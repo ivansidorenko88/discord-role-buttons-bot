@@ -68,18 +68,34 @@ async function upsertPanel(guild, config, saveConfig) {
   let message = null;
 
   if (config.messageId) {
-    message = await channel.messages.fetch(config.messageId).catch(() => null);
+    message = await channel.messages.fetch(config.messageId).catch(error => {
+      if (error?.code !== 10008 && error?.code !== 10003) {
+        console.error('[PANEL FETCH ERROR]', error);
+      }
+      return null;
+    });
   }
 
   if (message) {
-    await message.edit(payload);
-  } else {
-    message = await channel.send(payload);
-    config.messageId = message.id;
-    saveConfig(config);
+    try {
+      await message.edit(payload);
+      return message;
+    } catch (error) {
+      // Старое сообщение было удалено между fetch и edit.
+      if (error?.code !== 10008) throw error;
+
+      console.warn('[PANEL] Старое сообщение удалено. Создаю новое.');
+      config.messageId = null;
+      saveConfig(config);
+    }
   }
 
-  return message;
+  const newMessage = await channel.send(payload);
+  config.messageId = newMessage.id;
+  saveConfig(config);
+
+  console.log(`[PANEL] Новое сообщение панели: ${newMessage.id}`);
+  return newMessage;
 }
 
 module.exports = {
