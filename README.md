@@ -41,3 +41,13 @@ npm install
 npm run deploy
 npm start
 ```
+
+## v1.0.2 — стабильность role buttons
+
+- Нажатие кнопки больше не делает `guild.members.fetch(userId)`.
+- Выдача/снятие роли идёт напрямую через Discord REST API.
+- Для работы достаточно `GatewayIntentBits.Guilds`; Privileged Gateway Intents не нужны.
+- Кнопка подтверждается через `deferReply`, чтобы не ловить interaction timeout.
+- Добавлены точные логи ошибок выдачи роли.
+- Существующие role-кнопки продолжают работать после рестарта даже если хост очистил `data/config.json`.
+- `.env` из пользовательского архива в этот ZIP не включён.
