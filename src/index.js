@@ -22,7 +22,10 @@ if (!DISCORD_TOKEN) {
 }
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers
+  ]
 });
 
 function hasRoleFromInteraction(interaction, roleId) {
@@ -111,6 +114,58 @@ client.on(Events.Error, error => {
 
 process.on('unhandledRejection', error => {
   console.error('[Unhandled rejection]', error);
+});
+
+
+const WELCOME_MESSAGE = `👋 **Добро пожаловать на сервер ERROR 404!**
+
+Рады видеть тебя среди нас!
+
+Чтобы открыть нужные разделы сервера, сначала получи игровые роли. Перейди в канал <#1449962175870275666> и нажми на кнопку с интересующей тебя игрой или направлением.
+
+🎭 **Как работают роли?**
+
+Каждая роль открывает доступ к соответствующим разделам сервера: тематическим чатам, поиску игроков, обсуждениям, тактикам, голосовым каналам и другим материалам.
+
+Ты можешь выбрать несколько ролей, если играешь в разные игры. Если какая-то роль тебе больше не нужна — повторно нажми на соответствующую кнопку, чтобы снять её.
+
+━━━━━━━━━━━━━━━━━━
+
+🎮 **Добро пожаловать в ERROR 404** 🎮
+
+Это Discord-сервер для настоящих любителей игр.
+
+Независимо от того, во что ты играешь — в конкурентные шутеры, глубокие RPG, уютные инди-хиты или мобильные проекты — здесь есть место для тебя.
+
+Выбирай свои игровые роли, открывай интересующие разделы, находи единомышленников и присоединяйся к сообществу.
+
+**ERROR 404 — игра найдена.**`;
+
+client.on(Events.GuildMemberAdd, async member => {
+  try {
+    await member.send(WELCOME_MESSAGE);
+
+    console.log(
+      `[WELCOME DM] Отправлено пользователю ${member.user.tag} (${member.user.id})`
+    );
+  } catch (error) {
+    // Discord API code 50007 = Cannot send messages to this user.
+    if (error?.code === 50007) {
+      console.warn(
+        `[WELCOME DM] Личные сообщения закрыты у ${member.user.tag} (${member.user.id})`
+      );
+      return;
+    }
+
+    console.error(
+      `[WELCOME DM ERROR] Не удалось отправить сообщение ${member.user.tag} (${member.user.id})`,
+      {
+        code: error?.code,
+        status: error?.status,
+        message: error?.message
+      }
+    );
+  }
 });
 
 client.on(Events.InteractionCreate, async interaction => {
