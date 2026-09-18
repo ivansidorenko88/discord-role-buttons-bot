@@ -14,7 +14,7 @@ const commands = [
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
     .addSubcommand(sub =>
       sub.setName('create')
-        .setDescription('Создать или обновить сообщение с кнопками в заданном канале')
+        .setDescription('Создать или обновить сообщение с кнопками')
     )
     .addSubcommand(sub =>
       sub.setName('add')

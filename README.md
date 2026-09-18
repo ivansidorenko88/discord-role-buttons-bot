@@ -1,60 +1,43 @@
-# Discord Role Buttons Bot
+# Discord Role Buttons Bot v1.0.1
 
-Бот автоматически выдаёт или снимает роли по нажатию кнопок.
+Исправленная версия бота для автовыдачи ролей через кнопки.
 
-## Важное ограничение
+## Что исправлено
 
-Панель ролей публикуется и кнопки обрабатываются только в канале:
+- Убран `GuildMembers Intent`.
+- Для запуска достаточно `GatewayIntentBits.Guilds`.
+- Участник сервера корректно запрашивается при нажатии кнопки.
+- Бот по-прежнему работает только с панелью в канале:
+  `1449962175870275666`.
 
-`1449962175870275666`
+## Discord Developer Portal
 
-## Возможности
+В разделе Bot → Privileged Gateway Intents можно оставить всё выключенным:
 
-- `/role-panel create` — создать/обновить панель.
-- `/role-panel add` — добавить кнопку роли.
-- `/role-panel remove` — удалить кнопку роли.
-- `/role-panel list` — посмотреть текущие кнопки.
-- `/role-panel reset` — удалить все кнопки.
-- Повторное нажатие пользователем снимает роль.
-- Максимум 25 кнопок.
-- Настройки сохраняются в `data/config.json`.
-- Административные команды требуют право `Manage Roles`.
+- Presence Intent — OFF
+- Server Members Intent — OFF
+- Message Content Intent — OFF
+
+## Права бота
+
+Нужны:
+
+- View Channels
+- Send Messages
+- Read Message History
+- Embed Links
+- Manage Roles
+
+Роль бота должна находиться выше ролей, которые он выдаёт.
 
 ## Установка
 
-1. Установите Node.js 20.
-2. Создайте Discord Application и Bot.
-3. В Developer Portal включите **Server Members Intent**.
-4. Пригласите бота с правами:
-   - View Channels
-   - Send Messages
-   - Read Message History
-   - Manage Roles
-5. В настройках ролей Discord переместите роль бота **выше всех ролей**, которые он должен выдавать.
-6. Скопируйте `.env.example` в `.env`.
-7. Заполните:
-   - `DISCORD_TOKEN`
-   - `CLIENT_ID`
-   - `GUILD_ID`
-8. Выполните:
+1. Скопируйте `.env.example` в `.env`.
+2. Заполните `DISCORD_TOKEN`, `CLIENT_ID`, `GUILD_ID`.
+3. Выполните:
 
 ```bash
 npm install
 npm run deploy
 npm start
 ```
-
-## Пример настройки
-
-```text
-/role-panel add role:@Gamer label:Игры style:success emoji:🎮
-/role-panel add role:@News label:Новости style:primary emoji:📰
-/role-panel create
-```
-
-После этого сообщение появится только в канале `1449962175870275666`.
-
-## Поведение кнопки
-
-Если роли нет — бот выдаёт её.
-Если роль уже есть — бот снимает её.
