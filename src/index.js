@@ -6,13 +6,14 @@ const {
   Events,
   PermissionFlagsBits,
   MessageFlags,
-  Routes
+  Routes,
+  ActivityType
 } = require('discord.js');
 
 const { loadConfig, saveConfig } = require('./config');
 const { ROLE_CHANNEL_ID, upsertPanel } = require('./panel');
 
-const { DISCORD_TOKEN } = process.env;
+const { DISCORD_TOKEN, GUILD_ID } = process.env;
 
 const ADMIN_ROLE_ID = '1449827112017072336';
 
@@ -96,9 +97,48 @@ async function replyEphemeral(interaction, content) {
   }
 }
 
-client.once(Events.ClientReady, readyClient => {
+
+async function updateMemberCountPresence(guild = null) {
+  try {
+    let targetGuild = guild;
+
+    if (!targetGuild && GUILD_ID) {
+      targetGuild = client.guilds.cache.get(GUILD_ID)
+        ?? await client.guilds.fetch(GUILD_ID).catch(() => null);
+    }
+
+    if (!targetGuild) {
+      console.warn('[PRESENCE] Не удалось найти сервер для обновления количества участников.');
+      return;
+    }
+
+    const memberCount = targetGuild.memberCount;
+
+    client.user.setPresence({
+      activities: [
+        {
+          name: `${memberCount} участников на сервере`,
+          type: ActivityType.Watching
+        }
+      ],
+      status: 'online'
+    });
+
+    console.log(`[PRESENCE] Количество участников обновлено: ${memberCount}`);
+  } catch (error) {
+    console.error('[PRESENCE ERROR]', {
+      code: error?.code,
+      status: error?.status,
+      message: error?.message
+    });
+  }
+}
+
+client.once(Events.ClientReady, async readyClient => {
   console.log(`Бот запущен как ${readyClient.user.tag}`);
   console.log(`Канал панели ролей: ${ROLE_CHANNEL_ID}`);
+
+  await updateMemberCountPresence();
 });
 
 client.on(Events.Error, error => {
@@ -165,7 +205,14 @@ client.on(Events.GuildMemberAdd, async member => {
         message: error?.message
       }
     );
+  } finally {
+    await updateMemberCountPresence(member.guild);
   }
+});
+
+
+client.on(Events.GuildMemberRemove, async member => {
+  await updateMemberCountPresence(member.guild);
 });
 
 client.on(Events.InteractionCreate, async interaction => {
